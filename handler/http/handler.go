@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"gvisor.dev/gvisor/pkg/log"
 	"hash/crc32"
 	"io"
 	"math"
@@ -109,7 +110,27 @@ func (h *httpHandler) Init(md md.Metadata) error {
 	}
 
 	h.transport = &http.Transport{
-		DialContext:           h.dial,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// 调用原始 dial 方法
+			conn, err := h.dial(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			// 提取源端口并存储到 RecorderObject
+			//log.Infof("lms ====>>>> RecorderObjectFromContext")
+			if ro := ctx_internal.RecorderObjectFromContext(ctx); ro != nil {
+				if addr := conn.LocalAddr(); addr != nil {
+					_, portStr, err := net.SplitHostPort(addr.String())
+					if err == nil {
+						if port, err := strconv.Atoi(portStr); err == nil {
+							ro.OutboundPort = port
+							//log.Infof("lms ====RecorderObjectFromContext>>>> OutBoundPort: %d  , port:%d", ro.OutboundPort,port)
+						}
+					}
+				}
+			}
+			return conn, nil
+		},
 		IdleConnTimeout:       30 * time.Second,
 		ResponseHeaderTimeout: h.md.readTimeout,
 		DisableKeepAlives:     !h.md.keepalive,
@@ -132,7 +153,7 @@ func (h *httpHandler) Handle(ctx context.Context, conn net.Conn, opts ...handler
 		Time:       start,
 		SID:        string(ctxvalue.SidFromContext(ctx)),
 	}
-
+	log.Infof("http:  RemoteAddr   ===> %s ", ro.RemoteAddr)
 	ro.ClientIP = conn.RemoteAddr().String()
 	if clientAddr := ctxvalue.ClientAddrFromContext(ctx); clientAddr != "" {
 		ro.ClientIP = string(clientAddr)
@@ -255,21 +276,21 @@ func (h *httpHandler) handleRequest(ctx context.Context, conn net.Conn, req *htt
 		resp.Header = http.Header{}
 	}
 
-	ro.HTTP = &xrecorder.HTTPRecorderObject{
-		Host:   req.Host,
-		Proto:  req.Proto,
-		Scheme: req.URL.Scheme,
-		Method: req.Method,
-		URI:    req.RequestURI,
-		Request: xrecorder.HTTPRequestRecorderObject{
-			ContentLength: req.ContentLength,
-			Header:        req.Header.Clone(),
-		},
-	}
-	defer func() {
-		ro.HTTP.StatusCode = resp.StatusCode
-		ro.HTTP.Response.Header = resp.Header
-	}()
+	//ro.HTTP = &xrecorder.HTTPRecorderObject{
+	//	Host:   req.Host,
+	//	Proto:  req.Proto,
+	//	Scheme: req.URL.Scheme,
+	//	Method: req.Method,
+	//	URI:    req.RequestURI,
+	//	Request: xrecorder.HTTPRequestRecorderObject{
+	//		ContentLength: req.ContentLength,
+	//		Header:        req.Header.Clone(),
+	//	},
+	//}
+	//defer func() {
+	//	ro.HTTP.StatusCode = resp.StatusCode
+	//	ro.HTTP.Response.Header = resp.Header
+	//}()
 
 	if req.Method == "PRI" ||
 		(req.Method != http.MethodConnect && req.URL.Scheme != "http") {
@@ -352,6 +373,17 @@ func (h *httpHandler) handleRequest(ctx context.Context, conn net.Conn, req *htt
 		resp.Write(conn)
 		return err
 	}
+	log.Infof("lms ====>>>> %s ", cc.LocalAddr())
+	if addr := cc.LocalAddr(); addr != nil {
+		_, portStr, err := net.SplitHostPort(addr.String())
+		if err == nil {
+			if port, err := strconv.Atoi(portStr); err == nil {
+				ro.OutboundPort = port
+				log.Infof("lms ====>>>> OutBoundPort: %d  , port:%d", ro.OutboundPort,port)
+			}
+		}
+	}
+
 	defer cc.Close()
 
 	resp.StatusCode = http.StatusOK
@@ -486,6 +518,7 @@ func (h *httpHandler) proxyRoundTrip(ctx context.Context, rw io.ReadWriter, req 
 		ro.InputBytes = pStats.Get(stats.KindInputBytes)
 		ro.OutputBytes = pStats.Get(stats.KindOutputBytes)
 		ro.Duration = time.Since(ro.Time)
+		log.Debugf("Recording outboundPort: %d", ro.OutboundPort)
 		if err := ro.Record(ctx, h.recorder.Recorder); err != nil {
 			log.Errorf("record: %v", err)
 		}
@@ -497,17 +530,17 @@ func (h *httpHandler) proxyRoundTrip(ctx context.Context, rw io.ReadWriter, req 
 		}).Infof("%s >-< %s", ro.RemoteAddr, req.Host)
 	}()
 
-	ro.HTTP = &xrecorder.HTTPRecorderObject{
-		Host:   req.Host,
-		Proto:  req.Proto,
-		Scheme: req.URL.Scheme,
-		Method: req.Method,
-		URI:    req.RequestURI,
-		Request: xrecorder.HTTPRequestRecorderObject{
-			ContentLength: req.ContentLength,
-			Header:        req.Header.Clone(),
-		},
-	}
+	//ro.HTTP = &xrecorder.HTTPRecorderObject{
+	//	Host:   req.Host,
+	//	Proto:  req.Proto,
+	//	Scheme: req.URL.Scheme,
+	//	Method: req.Method,
+	//	URI:    req.RequestURI,
+	//	Request: xrecorder.HTTPRequestRecorderObject{
+	//		ContentLength: req.ContentLength,
+	//		Header:        req.Header.Clone(),
+	//	},
+	//}
 	if clientIP := xhttp.GetClientIP(req); clientIP != nil {
 		ro.ClientIP = clientIP.String()
 	}
@@ -540,7 +573,7 @@ func (h *httpHandler) proxyRoundTrip(ctx context.Context, rw io.ReadWriter, req 
 		Header:     http.Header{},
 		StatusCode: http.StatusServiceUnavailable,
 	}
-	ro.HTTP.StatusCode = res.StatusCode
+	//ro.HTTP.StatusCode = res.StatusCode
 
 	if h.options.Bypass != nil &&
 		h.options.Bypass.Contains(ctx, "tcp", host) {
@@ -573,14 +606,15 @@ func (h *httpHandler) proxyRoundTrip(ctx context.Context, rw io.ReadWriter, req 
 
 	ctx = ctxvalue.ContextWithClientAddr(ctx, ctxvalue.ClientAddr(clientAddr))
 	ctx = ctx_internal.ContextWithRecorderObject(ctx, ro)
+	log.Debugf("proxyRoundTrip: RecorderObject set, SID=%s", ro.SID)
 	ctx = ctxvalue.ContextWithLogger(ctx, log)
 
 	resp, err := h.transport.RoundTrip(req.WithContext(ctx))
 
-	if reqBody != nil {
-		ro.HTTP.Request.Body = reqBody.Content()
-		ro.HTTP.Request.ContentLength = reqBody.Length()
-	}
+	//if reqBody != nil {
+	//	ro.HTTP.Request.Body = reqBody.Content()
+	//	ro.HTTP.Request.ContentLength = reqBody.Length()
+	//}
 
 	if err != nil {
 		res.Write(rw)
@@ -588,9 +622,9 @@ func (h *httpHandler) proxyRoundTrip(ctx context.Context, rw io.ReadWriter, req 
 	}
 	defer resp.Body.Close()
 
-	ro.HTTP.StatusCode = resp.StatusCode
-	ro.HTTP.Response.Header = resp.Header.Clone()
-	ro.HTTP.Response.ContentLength = resp.ContentLength
+	//ro.HTTP.StatusCode = resp.StatusCode
+	//ro.HTTP.Response.Header = resp.Header.Clone()
+	//ro.HTTP.Response.ContentLength = resp.ContentLength
 
 	if log.IsLevelEnabled(logger.TraceLevel) {
 		dump, _ := httputil.DumpResponse(resp, false)
@@ -626,10 +660,10 @@ func (h *httpHandler) proxyRoundTrip(ctx context.Context, rw io.ReadWriter, req 
 
 	err = resp.Write(rw)
 
-	if respBody != nil {
-		ro.HTTP.Response.Body = respBody.Content()
-		ro.HTTP.Response.ContentLength = respBody.Length()
-	}
+	//if respBody != nil {
+	//	ro.HTTP.Response.Body = respBody.Content()
+	//	ro.HTTP.Response.ContentLength = respBody.Length()
+	//}
 
 	if err != nil {
 		err = fmt.Errorf("write response: %v", err)
@@ -652,11 +686,39 @@ func (h *httpHandler) dial(ctx context.Context, network, addr string) (conn net.
 	if log := ctxvalue.LoggerFromContext(ctx); log != nil {
 		log.Debugf("dial: new connection to host %s", addr)
 	}
+	// Resolve addr to IP
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("split host port: %v", err)
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		log.Warningf("lookup IP for %s: %v", host, err)
+		// Proceed with original addr if resolution fails
+	}
+
+	var ip string
+	if len(ips) > 0 {
+		// Prefer IPv4 if available
+		for _, ipAddr := range ips {
+			if ipAddr.To4() != nil {
+				ip = ipAddr.String()
+				break
+			}
+		}
+		// Fallback to first IP if no IPv4
+		if ip == "" {
+			ip = ips[0].String()
+		}
+	} else {
+		ip = host // Fallback to original host if no IPs
+	}
+	resolvedAddr := net.JoinHostPort(ip, port)
 
 	var buf bytes.Buffer
 	conn, err = h.options.Router.Dial(ctxvalue.ContextWithBuffer(ctx, &buf), network, addr)
 	if ro := ctx_internal.RecorderObjectFromContext(ctx); ro != nil {
-		ro.Route = buf.String()
+		ro.Route = resolvedAddr
 	}
 
 	return

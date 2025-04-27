@@ -109,17 +109,17 @@ func (h *unixHandler) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, r
 	if clientIP := xhttp.GetClientIP(req); clientIP != nil {
 		ro.ClientIP = clientIP.String()
 	}
-	ro.HTTP = &xrecorder.HTTPRecorderObject{
-		Host:   req.Host,
-		Proto:  req.Proto,
-		Scheme: req.URL.Scheme,
-		Method: req.Method,
-		URI:    req.RequestURI,
-		Request: xrecorder.HTTPRequestRecorderObject{
-			ContentLength: req.ContentLength,
-			Header:        req.Header.Clone(),
-		},
-	}
+	//ro.HTTP = &xrecorder.HTTPRecorderObject{
+	//	Host:   req.Host,
+	//	Proto:  req.Proto,
+	//	Scheme: req.URL.Scheme,
+	//	Method: req.Method,
+	//	URI:    req.RequestURI,
+	//	Request: xrecorder.HTTPRequestRecorderObject{
+	//		ContentLength: req.ContentLength,
+	//		Header:        req.Header.Clone(),
+	//	},
+	//}
 
 	// HTTP/1.0
 	if req.ProtoMajor == 1 && req.ProtoMinor == 0 {
@@ -146,10 +146,10 @@ func (h *unixHandler) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, r
 		return
 	}
 
-	if reqBody != nil {
-		ro.HTTP.Request.Body = reqBody.Content()
-		ro.HTTP.Request.ContentLength = reqBody.Length()
-	}
+	//if reqBody != nil {
+	//	ro.HTTP.Request.Body = reqBody.Content()
+	//	ro.HTTP.Request.ContentLength = reqBody.Length()
+	//}
 
 	xio.SetReadDeadline(cc, time.Now().Add(h.md.readTimeout))
 	resp, err := http.ReadResponse(bufio.NewReader(cc), req)
@@ -160,9 +160,9 @@ func (h *unixHandler) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, r
 	defer resp.Body.Close()
 	xio.SetReadDeadline(cc, time.Time{})
 
-	ro.HTTP.StatusCode = resp.StatusCode
-	ro.HTTP.Response.Header = resp.Header
-	ro.HTTP.Response.ContentLength = resp.ContentLength
+	//ro.HTTP.StatusCode = resp.StatusCode
+	//ro.HTTP.Response.Header = resp.Header
+	//ro.HTTP.Response.ContentLength = resp.ContentLength
 
 	if log.IsLevelEnabled(logger.TraceLevel) {
 		dump, _ := httputil.DumpResponse(resp, false)
@@ -193,10 +193,10 @@ func (h *unixHandler) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, r
 		return
 	}
 
-	if respBody != nil {
-		ro.HTTP.Response.Body = respBody.Content()
-		ro.HTTP.Response.ContentLength = respBody.Length()
-	}
+	//if respBody != nil {
+	//	ro.HTTP.Response.Body = respBody.Content()
+	//	ro.HTTP.Response.ContentLength = respBody.Length()
+	//}
 
 	if req.Header.Get("Upgrade") == "websocket" {
 		netpkg.Transport(rw, cc)

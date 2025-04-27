@@ -111,11 +111,11 @@ func (h *fileHandler) handleFunc(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		ro.Duration = time.Since(start)
-		ro.HTTP.StatusCode = rw.statusCode
-		ro.HTTP.Response = xrecorder.HTTPResponseRecorderObject{
-			ContentLength: rw.contentLength,
-			Header:        rw.Header(),
-		}
+		//ro.HTTP.StatusCode = rw.statusCode
+		//ro.HTTP.Response = xrecorder.HTTPResponseRecorderObject{
+		//	ContentLength: rw.contentLength,
+		//	Header:        rw.Header(),
+		//}
 		if err := ro.Record(context.Background(), h.recorder.Recorder); err != nil {
 			log.Errorf("record: %v", err)
 		}

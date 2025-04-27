@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/go-gost/core/limiter"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-gost/core/observer/stats"
 	"github.com/go-gost/gosocks5"
 	ctxvalue "github.com/go-gost/x/ctx"
+	ctx_internal "github.com/go-gost/x/internal/ctx"
 	xnet "github.com/go-gost/x/internal/net"
 	"github.com/go-gost/x/internal/util/sniffing"
 	traffic_wrapper "github.com/go-gost/x/limiter/traffic/wrapper"
@@ -66,6 +68,7 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 	}
 
 	var buf bytes.Buffer
+	ctx = ctx_internal.ContextWithRecorderObject(ctx, ro) // Ensure RecorderObject in context
 	cc, err := h.options.Router.Dial(ctxvalue.ContextWithBuffer(ctx, &buf), network, address)
 	ro.Route = buf.String()
 	if err != nil {
@@ -75,6 +78,24 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 		return err
 	}
 	defer cc.Close()
+
+	// Extract and set outbound port
+	if addr := cc.LocalAddr(); addr != nil {
+		log.Debugf("dial %s: LocalAddr=%s", address, addr.String())
+		_, portStr, err := net.SplitHostPort(addr.String())
+		if err == nil {
+			if port, err := strconv.Atoi(portStr); err == nil {
+				ro.OutboundPort = port
+				log.Debugf("dial %s: Set outboundPort=%d", address, port)
+			} else {
+				log.Debugf("dial %s: Invalid port format: %s, error: %v", address, portStr, err)
+			}
+		} else {
+			log.Debugf("dial %s: SplitHostPort failed: %v", address, err)
+		}
+	} else {
+		log.Debugf("dial %s: LocalAddr is nil", address)
+	}
 
 	resp := gosocks5.NewReply(gosocks5.Succeeded, nil)
 	log.Trace(resp)

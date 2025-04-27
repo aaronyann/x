@@ -94,6 +94,7 @@ type HandlerRecorderObject struct {
 	SID         string                   `json:"sid"`
 	Duration    time.Duration            `json:"duration"`
 	Time        time.Time                `json:"time"`
+	OutboundPort int 					 `json:"outboundPort,omitempty"`
 }
 
 func (p *HandlerRecorderObject) Record(ctx context.Context, r recorder.Recorder) error {

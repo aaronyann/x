@@ -2,6 +2,7 @@ package recorder
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-gost/core/recorder"
 	"github.com/go-redis/redis/v8"
@@ -134,7 +135,7 @@ func (r *redisSortedSetRecorder) Record(ctx context.Context, b []byte, opts ...r
 	}
 
 	return r.client.ZIncr(ctx, r.key, &redis.Z{
-		Score:  1,
+		Score:  float64(time.Now().Unix()),
 		Member: b,
 	}).Err()
 }

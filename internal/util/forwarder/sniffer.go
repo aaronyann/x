@@ -139,17 +139,17 @@ func (h *Sniffer) HandleHTTP(ctx context.Context, conn net.Conn, opts ...HandleO
 	}
 
 	ro := ho.RecorderObject
-	ro.HTTP = &xrecorder.HTTPRecorderObject{
-		Host:   req.Host,
-		Proto:  req.Proto,
-		Scheme: req.URL.Scheme,
-		Method: req.Method,
-		URI:    req.RequestURI,
-		Request: xrecorder.HTTPRequestRecorderObject{
-			ContentLength: req.ContentLength,
-			Header:        req.Header.Clone(),
-		},
-	}
+	//ro.HTTP = &xrecorder.HTTPRecorderObject{
+	//	Host:   req.Host,
+	//	Proto:  req.Proto,
+	//	Scheme: req.URL.Scheme,
+	//	Method: req.Method,
+	//	URI:    req.RequestURI,
+	//	Request: xrecorder.HTTPRequestRecorderObject{
+	//		ContentLength: req.ContentLength,
+	//		Header:        req.Header.Clone(),
+	//	},
+	//}
 
 	if clientIP := xhttp.GetClientIP(req); clientIP != nil {
 		ro.ClientIP = clientIP.String()
@@ -241,7 +241,7 @@ func (h *Sniffer) dial(ctx context.Context, conn net.Conn, req *http.Request, ho
 			ho.Bypass.Contains(ctx, "tcp", host, bypass.WithPathOption(req.RequestURI)) {
 			ho.Log.Debugf("bypass: %s %s", host, req.RequestURI)
 			res.StatusCode = http.StatusForbidden
-			ro.HTTP.StatusCode = res.StatusCode
+			//ro.HTTP.StatusCode = res.StatusCode
 			res.Write(conn)
 			return nil, nil, xbypass.ErrBypass
 		}
@@ -264,7 +264,7 @@ func (h *Sniffer) dial(ctx context.Context, conn net.Conn, req *http.Request, ho
 	if node == nil {
 		ho.Log.Warnf("node for %s not found", host)
 		res.StatusCode = http.StatusBadGateway
-		ro.HTTP.StatusCode = res.StatusCode
+		//ro.HTTP.StatusCode = res.StatusCode
 		res.Write(conn)
 		return nil, nil, errors.New("node not available")
 	}
@@ -377,17 +377,17 @@ func (h *Sniffer) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, node 
 		}).Infof("%s >-< %s", ro.RemoteAddr, req.Host)
 	}()
 
-	ro.HTTP = &xrecorder.HTTPRecorderObject{
-		Host:   req.Host,
-		Proto:  req.Proto,
-		Scheme: req.URL.Scheme,
-		Method: req.Method,
-		URI:    req.RequestURI,
-		Request: xrecorder.HTTPRequestRecorderObject{
-			ContentLength: req.ContentLength,
-			Header:        req.Header.Clone(),
-		},
-	}
+	//ro.HTTP = &xrecorder.HTTPRecorderObject{
+	//	Host:   req.Host,
+	//	Proto:  req.Proto,
+	//	Scheme: req.URL.Scheme,
+	//	Method: req.Method,
+	//	URI:    req.RequestURI,
+	//	Request: xrecorder.HTTPRequestRecorderObject{
+	//		ContentLength: req.ContentLength,
+	//		Header:        req.Header.Clone(),
+	//	},
+	//}
 
 	res := &http.Response{
 		ProtoMajor: req.ProtoMajor,
@@ -413,7 +413,7 @@ func (h *Sniffer) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, node 
 			id, ok := auther.Authenticate(ctx, username, password)
 			if !ok {
 				res.StatusCode = http.StatusUnauthorized
-				ro.HTTP.StatusCode = res.StatusCode
+				//ro.HTTP.StatusCode = res.StatusCode
 				res.Header.Set("WWW-Authenticate", "Basic")
 				log.Warnf("node %s(%s) 401 unauthorized", node.Name, node.Addr)
 				res.Write(rw)
@@ -460,10 +460,10 @@ func (h *Sniffer) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, node 
 
 	err = req.Write(cc)
 
-	if reqBody != nil {
-		ro.HTTP.Request.Body = reqBody.Content()
-		ro.HTTP.Request.ContentLength = reqBody.Length()
-	}
+	//if reqBody != nil {
+	//	ro.HTTP.Request.Body = reqBody.Content()
+	//	ro.HTTP.Request.ContentLength = reqBody.Length()
+	//}
 
 	if err != nil {
 		res.Write(rw)
@@ -489,9 +489,9 @@ func (h *Sniffer) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, node 
 		}
 	}
 
-	ro.HTTP.StatusCode = resp.StatusCode
-	ro.HTTP.Response.Header = resp.Header
-	ro.HTTP.Response.ContentLength = resp.ContentLength
+	//ro.HTTP.StatusCode = resp.StatusCode
+	//ro.HTTP.Response.Header = resp.Header
+	//ro.HTTP.Response.ContentLength = resp.ContentLength
 
 	if log.IsLevelEnabled(logger.TraceLevel) {
 		dump, _ := httputil.DumpResponse(resp, false)
@@ -536,10 +536,10 @@ func (h *Sniffer) httpRoundTrip(ctx context.Context, rw, cc io.ReadWriter, node 
 
 	err = resp.Write(rw)
 
-	if respBody != nil {
-		ro.HTTP.Response.Body = respBody.Content()
-		ro.HTTP.Response.ContentLength = respBody.Length()
-	}
+	//if respBody != nil {
+	//	ro.HTTP.Response.Body = respBody.Content()
+	//	ro.HTTP.Response.ContentLength = respBody.Length()
+	//}
 
 	if err != nil {
 		log.Errorf("write response: %v", err)
@@ -1060,17 +1060,17 @@ func (h *h2Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if clientIP := xhttp.GetClientIP(r); clientIP != nil {
 		ro.ClientIP = clientIP.String()
 	}
-	ro.HTTP = &xrecorder.HTTPRecorderObject{
-		Host:   r.Host,
-		Proto:  r.Proto,
-		Scheme: "https",
-		Method: r.Method,
-		URI:    r.RequestURI,
-		Request: xrecorder.HTTPRequestRecorderObject{
-			ContentLength: r.ContentLength,
-			Header:        r.Header.Clone(),
-		},
-	}
+	//ro.HTTP = &xrecorder.HTTPRecorderObject{
+	//	Host:   r.Host,
+	//	Proto:  r.Proto,
+	//	Scheme: "https",
+	//	Method: r.Method,
+	//	URI:    r.RequestURI,
+	//	Request: xrecorder.HTTPRequestRecorderObject{
+	//		ContentLength: r.ContentLength,
+	//		Header:        r.Header.Clone(),
+	//	},
+	//}
 
 	if log.IsLevelEnabled(logger.TraceLevel) {
 		dump, _ := httputil.DumpRequest(r, false)
@@ -1106,10 +1106,10 @@ func (h *h2Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := h.transport.RoundTrip(req.WithContext(r.Context()))
-	if reqBody != nil {
-		ro.HTTP.Request.Body = reqBody.Content()
-		ro.HTTP.Request.ContentLength = reqBody.Length()
-	}
+	//if reqBody != nil {
+	//	ro.HTTP.Request.Body = reqBody.Content()
+	//	ro.HTTP.Request.ContentLength = reqBody.Length()
+	//}
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -1117,9 +1117,9 @@ func (h *h2Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	ro.HTTP.StatusCode = resp.StatusCode
-	ro.HTTP.Response.Header = resp.Header
-	ro.HTTP.Response.ContentLength = resp.ContentLength
+	//ro.HTTP.StatusCode = resp.StatusCode
+	//ro.HTTP.Response.Header = resp.Header
+	//ro.HTTP.Response.ContentLength = resp.ContentLength
 
 	if log.IsLevelEnabled(logger.TraceLevel) {
 		dump, _ := httputil.DumpResponse(resp, false)
@@ -1144,10 +1144,10 @@ func (h *h2Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	io.Copy(w, resp.Body)
 
-	if respBody != nil {
-		ro.HTTP.Response.Body = respBody.Content()
-		ro.HTTP.Response.ContentLength = respBody.Length()
-	}
+	//if respBody != nil {
+	//	ro.HTTP.Response.Body = respBody.Content()
+	//	ro.HTTP.Response.ContentLength = respBody.Length()
+	//}
 }
 
 func (h *h2Handler) setHeader(w http.ResponseWriter, header http.Header) {
