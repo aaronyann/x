@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
+	"sync"
 
 	"github.com/go-gost/core/admission"
 	"github.com/go-gost/core/logger"
@@ -24,6 +26,10 @@ type httpPlugin struct {
 	client *http.Client
 	header http.Header
 	log    logger.Logger
+
+	//新增
+	passMap map[string]bool
+	passMu  sync.RWMutex
 }
 
 // NewHTTPPlugin creates an Admission plugin based on HTTP.
@@ -41,6 +47,7 @@ func NewHTTPPlugin(name string, url string, opts ...plugin.Option) admission.Adm
 			"kind":      "admission",
 			"admission": name,
 		}),
+		passMap: make(map[string]bool),
 	}
 }
 
@@ -52,6 +59,17 @@ func (p *httpPlugin) Admit(ctx context.Context, addr string, opts ...admission.O
 	rb := httpPluginRequest{
 		Addr: addr,
 	}
+	tIp := strings.Split(addr, ":")[0]
+	p.passMu.RLock()
+	pass, ok := p.passMap[tIp]
+
+	p.log.Infof("tIp: %s,pass: %v", tIp, pass)
+	p.passMu.RUnlock()
+	if ok && pass {
+		return pass
+	}
+	ok = false
+
 	v, err := json.Marshal(&rb)
 	if err != nil {
 		return
@@ -80,5 +98,10 @@ func (p *httpPlugin) Admit(ctx context.Context, addr string, opts ...admission.O
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return
 	}
+
+	p.passMu.Lock()
+	p.passMap[tIp] = res.OK
+	p.passMu.Unlock()
+
 	return res.OK
 }
