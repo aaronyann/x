@@ -153,7 +153,7 @@ func (h *httpHandler) Handle(ctx context.Context, conn net.Conn, opts ...handler
 		Time:       start,
 		SID:        string(ctxvalue.SidFromContext(ctx)),
 	}
-	log.Infof("http:  RemoteAddr   ===> %s ", ro.RemoteAddr)
+	//log.Infof("http:  RemoteAddr   ===> %s ", ro.RemoteAddr)
 	ro.ClientIP = conn.RemoteAddr().String()
 	if clientAddr := ctxvalue.ClientAddrFromContext(ctx); clientAddr != "" {
 		ro.ClientIP = string(clientAddr)
@@ -306,6 +306,17 @@ func (h *httpHandler) handleRequest(ctx context.Context, conn net.Conn, req *htt
 
 	clientID, ok := h.authenticate(ctx, conn, req, resp, log)
 	if !ok {
+		// 在认证失败时
+		resp := &http.Response{
+			StatusCode: http.StatusProxyAuthRequired,
+			Proto:      "HTTP/1.1",
+			ProtoMajor: 1,
+			ProtoMinor: 1,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("authentication failed")),
+		}
+		resp.Header.Set("Proxy-Authenticate", "Basic realm=\"User Visible Realm\"")
+		resp.Write(conn)
 		return errors.New("authentication failed")
 	}
 
