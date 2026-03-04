@@ -18,10 +18,11 @@ type httpPluginRequest struct {
 }
 
 type httpPluginResponse struct {
-	OK bool `json:"ok"`
+	OK bool   `json:"ok"`
+	ID string `json:"id,omitempty"`
 }
 
-type httpPlugin struct {
+type HTTPPlugin struct {
 	url    string
 	client *http.Client
 	header http.Header
@@ -29,6 +30,7 @@ type httpPlugin struct {
 
 	//新增
 	passMap map[string]bool
+	idMap   map[string]string // 存储 IP 对应的 ID
 	passMu  sync.RWMutex
 }
 
@@ -39,7 +41,7 @@ func NewHTTPPlugin(name string, url string, opts ...plugin.Option) admission.Adm
 		opt(&options)
 	}
 
-	return &httpPlugin{
+	return &HTTPPlugin{
 		url:    url,
 		client: plugin.NewHTTPClient(&options),
 		header: options.Header,
@@ -48,10 +50,11 @@ func NewHTTPPlugin(name string, url string, opts ...plugin.Option) admission.Adm
 			"admission": name,
 		}),
 		passMap: make(map[string]bool),
+		idMap:   make(map[string]string),
 	}
 }
 
-func (p *httpPlugin) Admit(ctx context.Context, addr string, opts ...admission.Option) (ok bool) {
+func (p *HTTPPlugin) Admit(ctx context.Context, addr string, opts ...admission.Option) (ok bool) {
 	if p.client == nil {
 		return
 	}
@@ -101,7 +104,25 @@ func (p *httpPlugin) Admit(ctx context.Context, addr string, opts ...admission.O
 
 	p.passMu.Lock()
 	p.passMap[tIp] = res.OK
+	// 存储返回的 ID（优先使用小写 id，如果没有则使用大写 ID）
+	admissionID := res.ID
+	if admissionID != "" {
+		p.idMap[tIp] = admissionID
+		p.log.Debugf("admission: stored ID for %s, id=%s", tIp, admissionID)
+	} else {
+		p.log.Debugf("admission: no ID returned for %s", tIp)
+	}
 	p.passMu.Unlock()
 
 	return res.OK
+}
+
+// GetID 获取指定地址对应的 ID
+func (p *HTTPPlugin) GetID(addr string) string {
+	tIp := strings.Split(addr, ":")[0]
+	p.passMu.RLock()
+	defer p.passMu.RUnlock()
+	id := p.idMap[tIp]
+	p.log.Debugf("admission GetID: addr=%s, ip=%s, id=%s", addr, tIp, id)
+	return id
 }

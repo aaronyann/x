@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"gvisor.dev/gvisor/pkg/log"
 	"hash/crc32"
 	"io"
 	"math"
@@ -20,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gvisor.dev/gvisor/pkg/log"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-gost/core/handler"
@@ -390,7 +391,7 @@ func (h *httpHandler) handleRequest(ctx context.Context, conn net.Conn, req *htt
 		if err == nil {
 			if port, err := strconv.Atoi(portStr); err == nil {
 				ro.OutboundPort = port
-				log.Infof("lms ====>>>> OutBoundPort: %d  , port:%d", ro.OutboundPort,port)
+				log.Infof("lms ====>>>> OutBoundPort: %d  , port:%d", ro.OutboundPort, port)
 			}
 		}
 	}
@@ -926,6 +927,13 @@ func (h *httpHandler) basicProxyAuth(proxyAuth string) (username, password strin
 func (h *httpHandler) authenticate(ctx context.Context, conn net.Conn, req *http.Request, resp *http.Response, log logger.Logger) (id string, ok bool) {
 	u, p, _ := h.basicProxyAuth(req.Header.Get("Proxy-Authorization"))
 	if h.options.Auther == nil {
+		// 如果没有 auther，尝试从 context 获取 admission ID
+		admissionID := ctxvalue.ClientIDFromContext(ctx)
+		if admissionID != "" {
+			log.Debugf("authenticate: no auther, use admission id as client id: %s", admissionID)
+			return string(admissionID), true
+		}
+		log.Debugf("authenticate: no auther and no admission id, returning empty client id")
 		return "", true
 	}
 	if id, ok = h.options.Auther.Authenticate(ctx, u, p); ok {
