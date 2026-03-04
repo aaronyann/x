@@ -14,7 +14,8 @@ import (
 )
 
 type httpPluginRequest struct {
-	Addr string `json:"addr"`
+	Service string `json:"service"`
+	Addr    string `json:"addr"`
 }
 
 type httpPluginResponse struct {
@@ -59,8 +60,14 @@ func (p *HTTPPlugin) Admit(ctx context.Context, addr string, opts ...admission.O
 		return
 	}
 
+	var options admission.Options
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	rb := httpPluginRequest{
-		Addr: addr,
+		Service: options.Service,
+		Addr:    addr,
 	}
 	tIp := strings.Split(addr, ":")[0]
 	p.passMu.RLock()

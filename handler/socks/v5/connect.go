@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-gost/core/bypass"
 	"github.com/go-gost/core/limiter"
 	"github.com/go-gost/core/logger"
 	"github.com/go-gost/core/observer/stats"
 	"github.com/go-gost/gosocks5"
-	ctxvalue "github.com/go-gost/x/ctx"
+	xctx "github.com/go-gost/x/ctx"
+	ictx "github.com/go-gost/x/internal/ctx"
 	ctx_internal "github.com/go-gost/x/internal/ctx"
 	xnet "github.com/go-gost/x/internal/net"
 	"github.com/go-gost/x/internal/util/sniffing"
@@ -32,7 +34,7 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 	log.Debugf("%s >> %s", conn.RemoteAddr(), address)
 
 	{
-		clientID := ctxvalue.ClientIDFromContext(ctx)
+		clientID := xctx.ClientIDFromContext(ctx)
 		rw := traffic_wrapper.WrapReadWriter(
 			h.limiter,
 			conn,
@@ -55,7 +57,7 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 		conn = xnet.NewReadWriteConn(rw, rw, conn)
 	}
 
-	if h.options.Bypass != nil && h.options.Bypass.Contains(ctx, network, address) {
+	if h.options.Bypass != nil && h.options.Bypass.Contains(ctx, network, address, bypass.WithService(h.options.Service)) {
 		resp := gosocks5.NewReply(gosocks5.NotAllowed, nil)
 		log.Trace(resp)
 		log.Debug("bypass: ", address)
@@ -64,12 +66,11 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 
 	switch h.md.hash {
 	case "host":
-		ctx = ctxvalue.ContextWithHash(ctx, &ctxvalue.Hash{Source: address})
+		ctx = xctx.ContextWithHash(ctx, &xctx.Hash{Source: address})
 	}
 
 	var buf bytes.Buffer
-	ctx = ctx_internal.ContextWithRecorderObject(ctx, ro) // Ensure RecorderObject in context
-	cc, err := h.options.Router.Dial(ctxvalue.ContextWithBuffer(ctx, &buf), network, address)
+	cc, err := h.options.Router.Dial(ictx.ContextWithBuffer(ctx, &buf), network, address)
 	ro.Route = buf.String()
 	if err != nil {
 		resp := gosocks5.NewReply(gosocks5.NetUnreachable, nil)
@@ -79,6 +80,9 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 	}
 	defer cc.Close()
 
+	log = log.WithFields(map[string]any{"src": cc.LocalAddr().String(), "dst": cc.RemoteAddr().String()})
+	ro.SrcAddr = cc.LocalAddr().String()
+	ro.DstAddr = cc.RemoteAddr().String()
 	// Extract and set outbound port
 	if addr := cc.LocalAddr(); addr != nil {
 		log.Debugf("dial %s: LocalAddr=%s", address, addr.String())
@@ -139,14 +143,16 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 		conn = xnet.NewReadWriteConn(br, conn, conn)
 		switch proto {
 		case sniffing.ProtoHTTP:
-			return sniffer.HandleHTTP(ctx, conn,
+			return sniffer.HandleHTTP(ctx, "tcp", conn,
+				sniffing.WithService(h.options.Service),
 				sniffing.WithDial(dial),
 				sniffing.WithDialTLS(dialTLS),
 				sniffing.WithRecorderObject(ro),
 				sniffing.WithLog(log),
 			)
 		case sniffing.ProtoTLS:
-			return sniffer.HandleTLS(ctx, conn,
+			return sniffer.HandleTLS(ctx, "tcp", conn,
+				sniffing.WithService(h.options.Service),
 				sniffing.WithDial(dial),
 				sniffing.WithDialTLS(dialTLS),
 				sniffing.WithRecorderObject(ro),
@@ -157,7 +163,8 @@ func (h *socks5Handler) handleConnect(ctx context.Context, conn net.Conn, networ
 
 	t := time.Now()
 	log.Infof("%s <-> %s", conn.RemoteAddr(), address)
-	xnet.Transport(conn, cc)
+	// xnet.Transport(conn, cc)
+	xnet.Pipe(ctx, conn, cc)
 	log.WithFields(map[string]any{
 		"duration": time.Since(t),
 	}).Infof("%s >-< %s", conn.RemoteAddr(), address)

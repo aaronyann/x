@@ -2,7 +2,6 @@ package tls
 
 import (
 	"context"
-	"crypto/tls"
 	"net"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	admission "github.com/go-gost/x/admission/wrapper"
 	xnet "github.com/go-gost/x/internal/net"
 	"github.com/go-gost/x/internal/net/proxyproto"
+	xtls "github.com/go-gost/x/internal/util/tls"
 	climiter "github.com/go-gost/x/limiter/conn/wrapper"
 	limiter_wrapper "github.com/go-gost/x/limiter/traffic/wrapper"
 	metrics "github.com/go-gost/x/metrics/wrapper"
@@ -64,11 +64,10 @@ func (l *tlsListener) Init(md md.Metadata) (err error) {
 	ln = proxyproto.WrapListener(l.options.ProxyProtocol, ln, 10*time.Second)
 	ln = metrics.WrapListener(l.options.Service, ln)
 	ln = stats.WrapListener(ln, l.options.Stats)
-	ln = admission.WrapListener(l.options.Admission, ln)
+	ln = admission.WrapListener(l.options.Service, l.options.Admission, ln)
 	ln = limiter_wrapper.WrapListener(l.options.Service, ln, l.options.TrafficLimiter)
 	ln = climiter.WrapListener(l.options.ConnLimiter, ln)
-
-	l.ln = tls.NewListener(ln, l.options.TLSConfig)
+	l.ln = xtls.NewListener(ln, l.options.TLSConfig)
 
 	return
 }
